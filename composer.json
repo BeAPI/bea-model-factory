@@ -1,0 +1,13 @@
+{
+  "name": "bea/bea-model-factory",
+  "description": "Add a model factory feature",
+  "minimum-stability": "stable",
+  "license": "GPL-2.0",
+  "authors": [
+    {
+      "name": "BeAPI",
+      "email": "technical@beapi.fr"
+    }
+  ],
+  "type": "wordpress-muplugin"
+}
