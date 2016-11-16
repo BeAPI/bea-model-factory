@@ -1,8 +1,7 @@
 <?php
 /*
  Plugin Name: BEA - Model factory
- Version: 1.0.0
- Version Boilerplate: 3.0.0
+ Version: 1.1.0
  Plugin URI: http://www.beapi.fr
  Description: Add a model factory feature
  Author: BE API Technical team
@@ -13,7 +12,7 @@
 
  ----
 
- Copyright 2015 BE API Technical team (human@beapi.fr)
+ Copyright 2016 BE API Technical team (human@beapi.fr)
 
  This program is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -35,28 +34,126 @@ if ( ! defined( 'ABSPATH' ) ) {
 	die( '-1' );
 }
 
-define( 'BEA_MODEL_FACTORY_VERSION', '1.0.0' );
-define( 'BEA_MODEL_FACTORY_MIN_PHP_VERSION', '5.4' );
+class BEA_Model_Factory {
+	/**
+	 * @var BEA_Model_Factory
+	 * @author Maxime Culea
+	 */
+	public static $instance;
 
-// Plugin URL and PATH
-define( 'BEA_MODEL_FACTORY_URL', plugin_dir_url( __FILE__ ) );
-define( 'BEA_MODEL_FACTORY_DIR', plugin_dir_path( __FILE__ ) );
+	/**
+	 * Private
+	 */
+	private function __construct() {
+	}
 
-/**
- * Check the PHP version defined on the plugin constant
- */
-require_once( BEA_MODEL_FACTORY_DIR . 'compat.php' );
-add_action( 'admin_init', array( 'BEA\Model_Factory\Compatibility', 'admin_init' ) );
+	/**
+	 * @return BEA_Model_Factory
+	 * @author Alexandre Sadowski
+	 */
+	public static function get_instance() {
+		if ( is_null( self::$instance ) ) {
+			self::$instance = new BEA_Model_Factory();
+		}
 
-/**
- * Autoload all the things \o/
- */
-require_once BEA_MODEL_FACTORY_DIR . 'autoload.php';
+		return self::$instance;
+	}
 
-add_action( 'plugins_loaded', 'init_bea_model_factory_plugin' );
-/**
- * Init the plugin
- */
-function init_bea_model_factory_plugin() {
-	\BEA\Model_Factory\Main::get_instance();
+	/**
+	 * Retrieve registered post type which has a model_class arg
+	 * model_class is the post type's model class name to be used unstead WP_Post ones
+	 * For using this, you must add "model_class" arg to the register_post_type
+	 *
+	 * @return array : post type => model name
+	 * @author Maxime CULEA
+	 */
+	private static function get_mapping_models() {
+		$all_pt = get_post_types( [ ], 'objects' );
+		if ( empty( $all_pt ) ) {
+			return array();
+		}
+
+		$mapping_model = array();
+		foreach ( $all_pt as $pt ) {
+			if ( ! isset( $pt->model_class ) || empty( $pt->model_class ) ) {
+				continue;
+			}
+			$mapping_model[ $pt->name ] = $pt->model_class;
+		}
+
+		return $mapping_model;
+	}
+
+	/**
+	 * Get the given post_type's model class name
+	 *
+	 * @param $post_type
+	 *
+	 * @return bool
+	 * @author Maxime CULEA
+	 */
+	public static function get_mapping_model( $post_type ) {
+		$mapping_model = self::get_mapping_models();
+
+		return isset( $mapping_model[ $post_type ] ) ? $mapping_model[ $post_type ] : false;
+	}
+
+	/**
+	 * Transform a WP_Post into the post type's model (model_class)
+	 *
+	 * @param WP_Post $post
+	 *
+	 * @return WP_Post
+	 * @author Maxime CULEA
+	 */
+	public static function get_model( WP_Post $post ) {
+		if ( ! isset( $post->post_type ) || ! self::get_mapping_model( $post->post_type ) ) {
+			return $post;
+		}
+
+		$klass = self::get_mapping_model( $post->post_type );
+
+		/**
+		 * Instantiate with the mapped model
+		 */
+		return new $klass( $post );
+	}
+
+	/**
+	 * Make a wp query which not returns only WP_Post array but also mapped model depending on the post type
+	 *
+	 * @param array $args
+	 *
+	 * @return WP_Query
+	 * @author Maxime CULEA
+	 */
+	public static function wp_query_with_models( $args = array() ) {
+		$query = new WP_Query( $args );
+		if ( ! $query->have_posts() ) {
+			return $query;
+		}
+
+		return self::add_models_to_wp_query( $query );
+	}
+
+	/**
+	 * Transform query's posts WP_Post into post type's model, if needed
+	 *
+	 * @param WP_Query $query
+	 *
+	 * @return WP_Query
+	 * @author Maxime CULEA
+	 */
+	public static function add_models_to_wp_query( WP_Query $query ) {
+		if ( ! $query->have_posts() ) {
+			return $query;
+		}
+		$posts_with_model = array_map( array( __CLASS__, 'get_model' ), $query->posts );
+		/**
+		 * Afterward, set $query->posts with modelized posts
+		 */
+		$query->posts = $posts_with_model;
+
+		return $query;
+	}
 }
